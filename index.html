@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nomad Ledger</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div id="app" class="container">
+        <header id="header-panel">
+            <div id="store-name-display">店舗名</div>
+            <div id="data-source-info">データ参照元: -</div>
+            <button id="btn-settings" style="padding: 5px 10px; cursor: pointer;">⚙️ 設定</button>
+        </header>
+
+        <main id="main-content">
+            <section id="product-grid">
+                </section>
+
+            <section id="payment-area">
+                <div id="summary-display">
+                    <div id="summary-row">
+                        <span id="subtotal-display">小計: ¥0</span>
+                        <button id="btn-undo" disabled>1つ取り消す</button>
+                    </div>
+                    <div id="received-display">お預かり: ¥0</div>
+                    <div id="change-display">お釣り: ¥0</div>
+                    <div id="change-guide"></div>
+                </div>
+
+                <div id="keypad-grid">
+                    <button class="keypad-btn">1</button>
+                    <button class="keypad-btn">2</button>
+                    <button class="keypad-btn">3</button>
+                    <button class="keypad-btn">4</button>
+                    <button class="keypad-btn">5</button>
+                    <button class="keypad-btn">6</button>
+                    <button class="keypad-btn">7</button>
+                    <button class="keypad-btn">8</button>
+                    <button class="keypad-btn">9</button>
+                    <button class="keypad-btn" id="btn-clear">C</button>
+                    <button class="keypad-btn">0</button>
+                    <button class="keypad-btn">00</button>
+                </div>
+
+                <div id="btn-finalize-container">
+                    <button id="btn-finalize">会計確定</button>
+                </div>
+            </section>
+        </main>
+
+        <footer id="status-bar">
+            <div id="sync-status">未同期: 0件</div>
+            <div id="sync-button-container">
+                <button id="btn-sync">同期</button>
+            </div>
+            <div id="endpoint-info">URL: -</div>
+        </footer>
+    </div>
+
+    <div id="settings-modal" class="modal hidden">
+        <div class="modal-content">
+            <h2>⚙️ 設定</h2>
+            
+            <label for="input-store-name">店舗名:</label>
+            <input type="text" id="input-store-name" placeholder="店舗名を入力">
+            
+            <label for="input-endpoint-url">GAS エンドポイントURL:</label>
+            <input type="text" id="input-endpoint-url" placeholder="https://script.google.com/macros/s/...">
+            
+            <label>商品マスタ同期:</label>
+            <div id="cloud-sync-info" style="margin: 10px 0; font-size: 0.9rem; color: #555;">
+                現在の商品数: <span id="current-product-count">0</span>件
+            </div>
+            <button id="btn-download-products" style="width: 100%; padding: 12px; background-color: #28a745; color: white; border: none; border-radius: 4px; font-weight: bold; cursor: pointer; margin-bottom: 15px;">
+                ☁️ スプレッドシートから商品リストを最新化
+            </button>
+            
+            <div class="modal-actions">
+                <button id="btn-close-settings">閉じる</button>
+                <button id="btn-save-settings">保存</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>

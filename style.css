@@ -1,0 +1,270 @@
+/* Reset & Base */
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+body, html {
+    width: 100%;
+    overflow: hidden; 
+    font-family: sans-serif;
+    background-color: #fff;
+}
+
+.container {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    height: 100vh;
+    overflow: hidden;
+}
+
+/* Header Panel (60px) */
+#header-panel {
+    height: 60px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0 15px;
+    background-color: #f0f0f0;
+    border-bottom: 1px solid #ccc;
+    flex-shrink: 0;
+}
+
+/* Main Content */
+#main-content {
+    flex: 1;
+    display: flex;
+    overflow: hidden;
+}
+
+/* Left Side: Product Grid (55%) */
+#product-grid {
+    width: 55%;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    grid-auto-rows: 160px;
+    align-content: start;
+    overflow-y: auto;
+    padding: 10px;
+    border-right: 4px solid #333;
+}
+
+/* Right Side: Payment Area (45%) */
+#payment-area {
+    width: 45%;
+    display: flex;
+    flex-direction: column;
+    background-color: #fafafa;
+    overflow-y: auto;
+}
+
+/* Summary Display (30% height of payment area) */
+#summary-display {
+    flex: 3;
+    padding: 10px;
+    border-bottom: 2px solid #ccc;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-around;
+}
+
+#summary-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+#change-guide {
+    font-size: 0.9rem;
+    color: #666;
+}
+
+/* Keypad Grid (70% height of payment area) */
+#keypad-grid {
+    flex: 7;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    grid-template-rows: repeat(4, 1fr);
+    padding: 5px;
+    gap: 5px;
+}
+
+.keypad-btn {
+    font-size: 1.5rem;
+    font-weight: bold;
+    cursor: pointer;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    background-color: #fff;
+}
+
+.keypad-btn:active {
+    background-color: #ddd;
+}
+
+/* Finalize Button Area */
+#btn-finalize-container {
+    flex-shrink: 0;
+    margin-top: 15px;
+    padding: 0 5px 5px 5px;
+}
+
+#btn-finalize {
+    width: 100%;
+    height: 75px;
+    background-color: #28a745; /* 緑 */
+    color: white;
+    font-size: 1.5rem;
+    font-weight: bold;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+}
+
+#btn-finalize:active {
+    background-color: #218838;
+}
+
+/* Footer (40px) */
+#status-bar {
+    height: 40px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0 15px;
+    background-color: #f0f0f0;
+    border-top: 1px solid #ccc;
+    flex-shrink: 0;
+    font-size: 0.85rem;
+}
+
+#sync-button-container button {
+    padding: 2px 10px;
+    cursor: pointer;
+}
+
+/* --- 追加: モーダル関連のスタイル --- */
+.modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 1000;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.modal.hidden {
+    display: none;
+}
+
+.modal-content {
+    background: #fff;
+    padding: 20px;
+    border-radius: 8px;
+    width: 90%;
+    max-width: 500px;
+    display: flex;
+    flex-direction: column;
+}
+
+.modal-content h2 {
+    margin-bottom: 15px;
+    font-size: 1.2rem;
+}
+
+.modal-content label {
+    margin-top: 10px;
+    font-size: 0.9rem;
+    font-weight: bold;
+}
+
+.modal-content input {
+    width: 100%;
+    margin-top: 5px;
+    padding: 8px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    box-sizing: border-box;
+}
+
+/* --- 追加: 商品リストGUIのスタイル --- */
+#products-settings-list {
+    max-height: 250px;
+    overflow-y: auto;
+    border: 1px solid #eee;
+    padding: 10px;
+    margin-top: 5px;
+    background-color: #fafafa;
+}
+
+.product-setting-row {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 8px;
+    align-items: center;
+}
+
+.product-setting-row input {
+    margin-top: 0; /* 親のmarginを上書き */
+}
+
+.setting-product-name {
+    flex: 2;
+}
+
+.setting-product-price {
+    flex: 1;
+}
+
+.btn-remove-product {
+    background-color: #dc3545;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    width: 30px;
+    height: 30px;
+    font-weight: bold;
+    flex-shrink: 0;
+}
+
+#btn-add-product {
+    margin-top: 10px;
+    padding: 10px;
+    background-color: #17a2b8;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-weight: bold;
+}
+
+.modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-top: 20px;
+}
+
+.modal-actions button {
+    padding: 8px 16px;
+    cursor: pointer;
+    border: none;
+    border-radius: 4px;
+    font-weight: bold;
+}
+
+#btn-save-settings {
+    background-color: #007bff;
+    color: white;
+}
+
+#btn-close-settings {
+    background-color: #e0e0e0;
+}
