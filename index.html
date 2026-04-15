@@ -1,92 +1,170 @@
-<!DOCTYPE html>
-<html lang="ja">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Nomad Ledger</title>
-    <link rel="stylesheet" href="style.css">
-</head>
-<body>
-    <div id="app" class="container">
-        <header id="header-panel">
-            <div id="store-name-display">店舗名</div>
-            <div id="data-source-info">データ参照元: -</div>
-            <div style="display: flex; gap: 10px;">
-                <button id="btn-send-report" style="padding: 5px 10px; cursor: pointer; background-color: #007bff; color: white; border: none; border-radius: 4px;">📤 締め/日報</button>
-                <button id="btn-settings" style="padding: 5px 10px; cursor: pointer;">⚙️ 設定</button>
-            </div>
-        </header>
+// Service Workerの登録
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('./sw.js').catch((err) => console.log('SW Failed', err));
+}
 
-        <main id="main-content">
-            <section id="product-grid">
-                </section>
+// 画面高さ固定
+const fixViewportHeight = () => {
+    const h = window.innerHeight + 'px';
+    document.documentElement.style.height = h;
+    document.body.style.height = h;
+    if (document.getElementById('app')) document.getElementById('app').style.height = h;
+};
+window.addEventListener('resize', fixViewportHeight);
+window.addEventListener('DOMContentLoaded', fixViewportHeight);
 
-            <section id="payment-area">
-                <div id="summary-display">
-                    <div id="summary-row">
-                        <span id="subtotal-display">小計: ¥0</span>
-                        <button id="btn-undo" disabled>1つ取り消す</button>
-                    </div>
-                    <div id="received-display">お預かり: ¥0</div>
-                    <div id="change-display">お釣り: ¥0</div>
-                    <div id="change-guide"></div>
-                </div>
+let cart = JSON.parse(localStorage.getItem('current_cart')) || [];
+let receivedStr = localStorage.getItem('received_str') || "0";
+let config = JSON.parse(localStorage.getItem("app_config")) || { store_name: "Nomad Ledger", endpoint_url: "" };
+let products = JSON.parse(localStorage.getItem("app_products")) || {};
 
-                <div id="keypad-grid">
-                    <button class="keypad-btn">1</button>
-                    <button class="keypad-btn">2</button>
-                    <button class="keypad-btn">3</button>
-                    <button class="keypad-btn">4</button>
-                    <button class="keypad-btn">5</button>
-                    <button class="keypad-btn">6</button>
-                    <button class="keypad-btn">7</button>
-                    <button class="keypad-btn">8</button>
-                    <button class="keypad-btn">9</button>
-                    <button class="keypad-btn" id="btn-clear">C</button>
-                    <button class="keypad-btn">0</button>
-                    <button class="keypad-btn">00</button>
-                </div>
+const formatYen = (n) => "¥" + Math.floor(n).toLocaleString("ja-JP");
 
-                <div id="btn-finalize-container">
-                    <button id="btn-finalize">会計確定</button>
-                </div>
-            </section>
-        </main>
+// お釣り内訳
+const calculateChangeBreakdown = (amount) => {
+  if (amount <= 0) return "";
+  let rem = amount;
+  const units = [10000, 5000, 1000, 500, 100, 50, 10, 5, 1];
+  const names = {10000:"万札",5000:"五千円札",1000:"千円札",500:"500円玉",100:"100円玉",50:"50円玉",10:"10円玉",5:"5円玉",1:"1円玉"};
+  return units.map(u => {
+    const c = Math.floor(rem / u);
+    rem %= u;
+    return c > 0 ? `${names[u]}×${c}` : null;
+  }).filter(v => v).join("、");
+};
 
-        <footer id="status-bar">
-            <div id="sync-status">未同期: 0件</div>
-            <div id="sync-button-container">
-                <button id="btn-sync">同期</button>
-            </div>
-            <div id="endpoint-info">URL: -</div>
-        </footer>
-    </div>
+// イベント設定
+const setupEventListeners = () => {
+  document.getElementById("btn-settings").onclick = () => {
+    document.getElementById("input-store-name").value = config.store_name;
+    document.getElementById("input-endpoint-url").value = config.endpoint_url;
+    document.getElementById("current-product-count").innerText = Object.keys(products).length;
+    document.getElementById("settings-modal").classList.remove("hidden");
+  };
 
-    <div id="settings-modal" class="modal hidden">
-        <div class="modal-content">
-            <h2>⚙️ 設定</h2>
-            
-            <label for="input-store-name">店舗名:</label>
-            <input type="text" id="input-store-name" placeholder="店舗名を入力">
-            
-            <label for="input-endpoint-url">GAS エンドポイントURL:</label>
-            <input type="text" id="input-endpoint-url" placeholder="https://script.google.com/macros/s/...">
-            
-            <label>商品マスタ同期:</label>
-            <div id="cloud-sync-info" style="margin: 10px 0; font-size: 0.9rem; color: #555;">
-                現在の商品数: <span id="current-product-count">0</span>件
-            </div>
-            <button id="btn-download-products" style="width: 100%; padding: 12px; background-color: #28a745; color: white; border: none; border-radius: 4px; font-weight: bold; cursor: pointer; margin-bottom: 15px;">
-                ☁️ スプレッドシートから商品リストを最新化
-            </button>
-            
-            <div class="modal-actions">
-                <button id="btn-close-settings">閉じる</button>
-                <button id="btn-save-settings">保存</button>
-            </div>
-        </div>
-    </div>
+  document.getElementById("btn-save-settings").onclick = () => {
+    config.store_name = document.getElementById("input-store-name").value.trim();
+    config.endpoint_url = document.getElementById("input-endpoint-url").value.trim();
+    localStorage.setItem("app_config", JSON.stringify(config));
+    document.getElementById("settings-modal").classList.add("hidden");
+    renderUI();
+  };
 
-    <script src="app.js"></script>
-</body>
-</html>
+  document.getElementById("btn-close-settings").onclick = () => document.getElementById("settings-modal").classList.add("hidden");
+
+  document.getElementById("btn-download-products").onclick = async () => {
+    const url = document.getElementById("input-endpoint-url").value.trim();
+    if (!url) return alert("URLを入力してください");
+    try {
+      const res = await fetch(url);
+      products = await res.json();
+      localStorage.setItem("app_products", JSON.stringify(products));
+      renderUI();
+      alert("同期完了！");
+    } catch (e) { alert("同期失敗"); }
+  };
+
+  document.getElementById("btn-undo").onclick = () => { cart.pop(); renderUI(); };
+  document.querySelectorAll(".keypad-btn").forEach(b => b.onclick = () => handleKeypadInput(b.innerText));
+  document.getElementById("btn-finalize").onclick = finalizeTransaction;
+  document.getElementById("btn-sync").onclick = syncData;
+  document.getElementById("btn-send-report").onclick = sendDailyReport; // 日報ボタン
+};
+
+const handleKeypadInput = (v) => {
+  if (v === "C") receivedStr = "0";
+  else if (v === "00") receivedStr += "00";
+  else receivedStr = (receivedStr === "0") ? v : receivedStr + v;
+  renderUI();
+};
+
+const finalizeTransaction = () => {
+  const total = cart.reduce((s, i) => s + i.price, 0);
+  const received = parseFloat(receivedStr);
+  if (received < total) return alert("金額不足");
+  
+  const history = JSON.parse(localStorage.getItem("nomad_sales_history") || "[]");
+  history.push({
+    id: Date.now(),
+    timestamp: new Date().toLocaleString("ja-JP"),
+    items: cart.map(i => i.name),
+    total: total, received: received, change: received - total
+  });
+  localStorage.setItem("nomad_sales_history", JSON.stringify(history));
+  cart = []; receivedStr = "0";
+  renderUI();
+  alert("会計完了");
+};
+
+const syncData = async () => {
+  if (!config.endpoint_url) return;
+  const history = JSON.parse(localStorage.getItem("nomad_sales_history") || "[]");
+  if (history.length === 0) return;
+
+  try {
+    const res = await fetch(config.endpoint_url, {
+      method: "POST",
+      body: JSON.stringify({ store_name: config.store_name, transactions: history })
+    });
+    if ((await res.json()).status === "success") {
+      localStorage.removeItem('nomad_sales_history');
+      renderUI();
+    }
+  } catch (e) { alert("同期エラー"); }
+};
+
+// 日報送信機能
+const sendDailyReport = async () => {
+    if (!config.endpoint_url) return alert("URLを設定してください");
+    if (!confirm("本日の日報をSlackに送信しますか？")) return;
+
+    const btn = document.getElementById("btn-send-report");
+    btn.innerText = "送信中...";
+    try {
+        const res = await fetch(config.endpoint_url, {
+            method: "POST",
+            body: JSON.stringify({ action: "generate_report" })
+        });
+        if ((await res.json()).status === "success") alert("日報を送信しました！");
+    } catch (e) { alert("送信失敗"); }
+    btn.innerText = "📤 締め/日報";
+};
+
+const renderUI = () => {
+  localStorage.setItem("current_cart", JSON.stringify(cart));
+  localStorage.setItem("received_str", receivedStr);
+
+  document.getElementById("store-name-display").innerText = config.store_name;
+  
+  // 表示の修正：「URLが設定されていればスプシ参照」と表示
+  const source = document.getElementById("data-source-info");
+  source.innerText = config.endpoint_url ? "データ参照元: Googleスプレッドシート" : "データ参照元: localStorage (未設定)";
+
+  const grid = document.getElementById("product-grid");
+  grid.innerHTML = "";
+  for (const name in products) {
+    const btn = document.createElement("button");
+    btn.className = "product-btn";
+    btn.innerText = `${name}\n(${formatYen(products[name])})`;
+    btn.onclick = () => { cart.push({ name, price: products[name] }); renderUI(); };
+    grid.appendChild(btn);
+  }
+
+  const subtotal = cart.reduce((s, i) => s + i.price, 0);
+  const received = parseFloat(receivedStr);
+  document.getElementById("subtotal-display").innerText = `ぜんぶで: ${formatYen(subtotal)}`;
+  document.getElementById("received-display").innerText = `もらったお金: ${formatYen(received)}`;
+  const change = received - subtotal;
+  const changeDisp = document.getElementById("change-display");
+  changeDisp.innerText = `おつり: ${formatYen(change)}`;
+  changeDisp.style.color = change < 0 ? "red" : "green";
+  document.getElementById("change-guide").innerText = calculateChangeBreakdown(change);
+
+  document.getElementById("btn-undo").disabled = cart.length === 0;
+  document.getElementById("btn-finalize").disabled = cart.length === 0 || change < 0;
+  const history = JSON.parse(localStorage.getItem("nomad_sales_history") || "[]");
+  document.getElementById("sync-status").innerText = `未同期: ${history.length}件`;
+};
+
+setupEventListeners();
+renderUI();
