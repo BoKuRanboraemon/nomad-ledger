@@ -84,6 +84,7 @@ const setupEventListeners = () => {
   const finalizeBtn = document.getElementById("btn-finalize");
   const syncBtn = document.getElementById("btn-sync");
   const keypadBtns = document.querySelectorAll(".keypad-btn");
+  const btnSendReport = document.getElementById("btn-send-report");
   
   // モーダル制御要素
   const btnSettings = document.getElementById("btn-settings");
@@ -180,6 +181,9 @@ const setupEventListeners = () => {
   }
   if (syncBtn) {
     syncBtn.onclick = syncData;
+  }
+  if (btnSendReport) {
+    btnSendReport.onclick = sendDailyReport;
   }
 };
 
@@ -284,6 +288,55 @@ const syncData = async () => {
       syncButton.innerText = "同期";
     }
   }
+};
+
+const sendDailyReport = async () => {
+    if (!config.endpoint_url) {
+        alert("設定画面からGASエンドポイントURLを登録してください。");
+        return;
+    }
+    
+    if (!navigator.onLine) {
+        alert("オフラインのため送信できません。電波の良い場所で再試行してください。");
+        return;
+    }
+
+    // まだ同期されていないデータがあるかチェック
+    const history = JSON.parse(localStorage.getItem("nomad_sales_history") || "[]");
+    if (history.length > 0) {
+        const confirmSync = confirm(`未同期の売上データが ${history.length} 件あります。\n日報を送信する前に同期しますか？\n（「キャンセル」を押すと同期せずに日報だけ送信します）`);
+        if (confirmSync) {
+            await syncData();
+        }
+    }
+
+    const btn = document.getElementById("btn-send-report");
+    const originalText = btn.innerText;
+
+    try {
+        btn.innerText = "送信中...";
+        btn.disabled = true;
+
+        const response = await fetch(config.endpoint_url, {
+            method: "POST",
+            headers: { "Content-Type": "text/plain" },
+            body: JSON.stringify({ action: "generate_report" })
+        });
+        
+        const result = await response.json();
+        
+        if (result.status === "success") {
+            alert("本日の締め作業が完了しました！\nSlackにAI日報が送信されました。");
+        } else {
+            alert("エラーが発生しました:\n" + result.message);
+        }
+    } catch (error) {
+        console.error("Report generation failed:", error);
+        alert("通信エラーが発生しました。");
+    } finally {
+        btn.innerText = originalText;
+        btn.disabled = false;
+    }
 };
 
 const saveCart = () => localStorage.setItem("current_cart", JSON.stringify(cart));
