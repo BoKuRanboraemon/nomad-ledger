@@ -45,9 +45,10 @@ const calculateChangeBreakdown = (changeAmount) => {
 const init = async () => {
   try {
     const [configRes, productsRes] = await Promise.all([
-      fetch("config.json"),
-      fetch("products.json")
+      fetch("data/config.json"),
+      fetch("data/products.json")
     ]);
+    
     if (!configRes.ok || !productsRes.ok) throw new Error("Fetch failed");
     
     const fetchedConfig = await configRes.json();
