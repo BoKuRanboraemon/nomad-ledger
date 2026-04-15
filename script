@@ -1,0 +1,432 @@
+/**
+ * =========================================================
+ * Nomad Ledger V4.3 バックエンド処理
+ * =========================================================
+ */
+
+/**
+ * 共通設定：指定した日付の月次シート名を取得する
+ */
+function getSheetNameFromDate(date) {
+  return "売上履歴_" + Utilities.formatDate(date, Session.getScriptTimeZone(), "yyyy-MM");
+}
+
+/**
+ * 共通設定：現在の月次シート名を取得する（既存互換用）
+ */
+function getCurrentSheetName() {
+  return getSheetNameFromDate(new Date());
+}
+
+/**
+ * 【同期機能】アプリからデータを受け取る（売上保存 or 日報送信）
+ */
+function doPost(e) {
+  try {
+    const data = JSON.parse(e.postData.contents);
+
+    // アプリから「日報送信」の合図が来たら、日報を作って終了する
+    if (data.action === "generate_report") {
+      generateDailyReport();
+      return ContentService.createTextOutput(JSON.stringify({ "status": "success", "message": "日報を送信しました" }))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+
+    // 既存：売上データの保存処理
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const sheetName = getCurrentSheetName();
+    let sheet = ss.getSheetByName(sheetName);
+    
+    if (!sheet) {
+      sheet = ss.insertSheet(sheetName);
+      sheet.appendRow(["日時", "店舗名", "商品", "合計", "預かり", "お釣り", "ID"]);
+      sheet.getRange("A1:G1").setFontWeight("bold");
+      sheet.setFrozenRows(1);
+    }
+
+    const storeName = data.store_name;
+    const transactions = data.transactions;
+
+    transactions.forEach(t => {
+      sheet.appendRow([
+        t.timestamp,
+        storeName,
+        t.items.join(", "),
+        t.total,
+        t.received,
+        t.change,
+        t.id
+      ]);
+    });
+
+    return ContentService.createTextOutput(JSON.stringify({ "status": "success" }))
+      .setMimeType(ContentService.MimeType.JSON);
+
+  } catch (error) {
+    return ContentService.createTextOutput(JSON.stringify({ "status": "error", "message": error.toString() }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+}
+
+/**
+ * 【最新化機能】アプリへ商品マスタのデータを返す
+ */
+function doGet(e) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let sheet = ss.getSheetByName("商品マスタ");
+
+  if (!sheet) {
+    sheet = ss.insertSheet("商品マスタ");
+    sheet.appendRow(["商品名", "価格"]);
+    return ContentService.createTextOutput(JSON.stringify({}))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+
+  const data = sheet.getDataRange().getValues();
+  const products = {};
+
+  for (let i = 1; i < data.length; i++) {
+    const name = data[i][0];
+    const price = parseInt(data[i][1], 10);
+    if (name && !isNaN(price)) {
+      products[name] = price;
+    }
+  }
+
+  return ContentService.createTextOutput(JSON.stringify(products))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
+/**
+ * 【修正済】指定した日付の売上データを取得する（Date型変換の回避版）
+ */
+function getSalesDataByDate(targetDate) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheetName = getSheetNameFromDate(targetDate);
+  const sheet = ss.getSheetByName(sheetName);
+
+  if (!sheet) return [];
+
+  const values = sheet.getDataRange().getValues();
+  if (values.length <= 1) return [];
+
+  const dataRows = values.slice(1);
+  const targetStr = Utilities.formatDate(targetDate, Session.getScriptTimeZone(), "yyyy/MM/dd");
+
+  return dataRows.filter(row => {
+    const timestamp = row[0];
+    if (!timestamp) return false;
+
+    let rowDateStr = "";
+    // スプレッドシートが自動でDateオブジェクトに変換している場合
+    if (timestamp instanceof Date) {
+      rowDateStr = Utilities.formatDate(timestamp, Session.getScriptTimeZone(), "yyyy/MM/dd");
+    } else {
+      // 文字列として保存されている場合（先頭10文字を抽出して「/」に統一）
+      rowDateStr = timestamp.toString().substring(0, 10).replace(/-/g, '/');
+    }
+
+    return rowDateStr === targetStr;
+  });
+}
+
+/**
+ * 【V4.3追加】OpenWeather APIから明日の天気（広島）を取得する
+ */
+function getTomorrowWeather() {
+  const props = PropertiesService.getScriptProperties();
+  const apiKey = props.getProperty('OPENWEATHER_API_KEY');
+  
+  if (!apiKey) return "天気情報なし（APIキー未登録）";
+
+  // 広島のデータを取得（言語:日本語、単位:摂氏）
+  const url = `https://api.openweathermap.org/data/2.5/forecast?q=Hiroshima,jp&units=metric&lang=ja&appid=${apiKey}`;
+  
+  try {
+    const response = UrlFetchApp.fetch(url, { muteHttpExceptions: true });
+    const json = JSON.parse(response.getContentText());
+    if (json.cod !== "200") return "天気情報取得エラー";
+
+    // 明日の昼12時頃の予報を抽出
+    const tomorrowNoon = new Date(new Date().getTime() + 86400000);
+    tomorrowNoon.setHours(12, 0, 0, 0);
+
+    let closest = json.list[0];
+    let minDiff = Math.abs(tomorrowNoon.getTime() - new Date(closest.dt * 1000).getTime());
+
+    json.list.forEach(item => {
+      const diff = Math.abs(tomorrowNoon.getTime() - new Date(item.dt * 1000).getTime());
+      if (diff < minDiff) {
+        minDiff = diff;
+        closest = item;
+      }
+    });
+
+    const weather = closest.weather[0].description;
+    const temp = closest.main.temp;
+    const pop = Math.round(closest.pop * 100); // 降水確率
+    return `天気: ${weather}, 気温: ${temp}℃, 降水確率: ${pop}%`;
+    
+  } catch(e) {
+    return "天気情報の取得に失敗しました";
+  }
+}
+
+/**
+ * 【AI日報】V4.3対応: 時間帯・過去比較・天気を含むプロンプト生成と通知
+ */
+function generateDailyReport() {
+  const today = new Date();
+  const yesterday = new Date(today.getTime() - 86400000);
+  const lastWeek = new Date(today.getTime() - 7 * 86400000);
+
+  const todayRows = getSalesDataByDate(today);
+  const yesterdayRows = getSalesDataByDate(yesterday);
+  const lastWeekRows = getSalesDataByDate(lastWeek);
+
+  if (todayRows.length === 0) {
+    console.log("本日の売上データがまだ同期されていません。");
+    return;
+  }
+
+  // --- 本日の集計（売上・客数・商品・時間帯） ---
+  const customerCount = todayRows.length;
+  let totalSales = 0;
+  const itemCounts = {};
+  const hourlyData = {};
+
+  todayRows.forEach(row => {
+    totalSales += row[3];
+    
+    // 商品集計
+    const items = row[2].toString().split(", ");
+    items.forEach(item => { if (item) itemCounts[item] = (itemCounts[item] || 0) + 1; });
+    
+    // 時間帯集計
+    // timestampがDate型かString型か判定して処理
+    const timestampRaw = row[0];
+    const timestampDate = (timestampRaw instanceof Date) ? timestampRaw : new Date(timestampRaw);
+    
+    if (!isNaN(timestampDate.getTime())) {
+      const hour = timestampDate.getHours();
+      if (!hourlyData[hour]) hourlyData[hour] = { count: 0, sales: 0 };
+      hourlyData[hour].count += 1;
+      hourlyData[hour].sales += row[3];
+    }
+  });
+
+  const averageSpend = Math.floor(totalSales / customerCount);
+  
+  // ランキング文字列生成
+  const itemRankingStr = Object.entries(itemCounts)
+    .sort((a, b) => b[1] - a[1])
+    .map(([name, count]) => `・${name}: ${count}個`).join("\n");
+
+  // 時間帯文字列生成
+  const hourlyStr = Object.keys(hourlyData).sort((a,b) => a - b).map(hour => {
+    return `・${hour}時台: 売上 ${hourlyData[hour].sales}円 (客数: ${hourlyData[hour].count}名)`;
+  }).join("\n");
+
+  // --- 過去データ集計 ---
+  const yesterdaySales = yesterdayRows.reduce((sum, row) => sum + row[3], 0);
+  const lastWeekSales = lastWeekRows.reduce((sum, row) => sum + row[3], 0);
+
+  // --- 天気データ取得 ---
+  const weatherStr = getTomorrowWeather();
+
+  // --- プロンプト組み立て ---
+const prompt = `あなたは店舗経営をサポートするAIアシスタント「Gemini」です。冒頭は「お疲れ様です！AIコンサルタントのGeminiです。」と挨拶してから、
+以下の「本日の実績」「過去比較」「明日の天気予報」を分析し、明日への具体的な提案を日報形式で作成してください。
+
+【本日の実績】
+・売上: ${totalSales}円 (客数: ${customerCount}名, 客単価: ${averageSpend}円)
+・時間帯別の傾向:
+${hourlyStr}
+・売れ筋商品:
+${itemRankingStr}
+
+【過去との比較】
+・前日売上: ${yesterdaySales}円 (前日差: ${totalSales - yesterdaySales}円)
+・前週同曜日売上: ${lastWeekSales}円 (前週差: ${totalSales - lastWeekSales}円)
+
+【明日の環境データ（店舗周辺）】
+・${weatherStr}
+
+【出力形式】
+1. 📊 本日のサマリーと過去比較（前日・前週との増減への言及）
+2. 💡 時間帯・商品別の傾向と気づき（ピーク時の評価など）
+3. 🍞 明日への具体的なアクションプラン（天気予報やトレンドを踏まえた仕込み調整・レコメンド提案など）
+`;
+
+  // AI呼び出しとSlack通知（Properties連携済み）
+  const reportText = callGeminiAPI(prompt);
+  sendToSlack(reportText);
+  console.log("Slackへの送信が完了しました。");
+}
+
+
+/**
+ * =========================================================
+ * UI・設定・連携系関数
+ * =========================================================
+ */
+
+/**
+ * スプレッドシートを開いた時に実行される関数
+ */
+function onOpen() {
+  const ui = SpreadsheetApp.getUi();
+  ui.createMenu('⚙️ Nomad Ledger管理')
+      .addItem('🔑 APIキー・Webhookの登録', 'showSettingsDialog')
+      .addItem('👁️ 登録済み設定の確認', 'showCurrentSettings') // 追加: 登録状況の確認
+      .addSeparator()
+      .addItem('📖 接続URLの取得方法', 'showSetupGuide')
+      .addItem('🧪 疎通テスト', 'testConnection')
+      .addToUi();
+}
+
+/**
+ * 【追加】現在登録されているAPIキーを（一部伏せ字で）確認する関数
+ */
+function showCurrentSettings() {
+  const ui = SpreadsheetApp.getUi();
+  const props = PropertiesService.getScriptProperties();
+
+  const gemini = props.getProperty('GEMINI_API_KEY') || '未登録';
+  const weather = props.getProperty('OPENWEATHER_API_KEY') || '未登録';
+  const slack = props.getProperty('SLACK_WEBHOOK_URL') || '未登録';
+
+  // セキュリティのため、長いキーは一部を伏せ字にして表示する関数
+  const mask = (str) => {
+    if (str === '未登録') return str;
+    if (str.length <= 10) return '********'; 
+    return str.substring(0, 5) + '...' + str.substring(str.length - 4);
+  };
+
+  const message = 
+    `現在の登録状況は以下の通りです。\n\n` +
+    `■ Gemini APIキー:\n ${mask(gemini)}\n\n` +
+    `■ OpenWeather APIキー:\n ${mask(weather)}\n\n` +
+    `■ Slack Webhook URL:\n ${mask(slack)}\n\n` +
+    `※変更したい場合は「🔑 APIキー・Webhookの登録」から新しい値で上書きしてください。`;
+
+  ui.alert('登録済み設定の確認', message, ui.ButtonSet.OK);
+}
+
+/**
+ * 秘密情報を入力するダイアログを表示し、Script Propertiesに保存する
+ */
+function showSettingsDialog() {
+  const ui = SpreadsheetApp.getUi();
+  const props = PropertiesService.getScriptProperties();
+
+  const settings = [
+    { key: 'GEMINI_API_KEY', label: 'Gemini APIキー' },
+    { key: 'OPENWEATHER_API_KEY', label: 'OpenWeather APIキー' },
+    { key: 'SLACK_WEBHOOK_URL', label: 'Slack Webhook URL' }
+  ];
+
+  for (let i = 0; i < settings.length; i++) {
+    let s = settings[i];
+    const current = props.getProperty(s.key) ? "【登録済】" : "【未登録】";
+    const res = ui.prompt(s.label + ' の設定', current + ' 新しい値を入力してください\n（変更しない場合・後で設定する場合は空欄のままOK）', ui.ButtonSet.OK_CANCEL);
+    
+    if (res.getSelectedButton() == ui.Button.CANCEL) {
+      ui.alert('設定を中断しました。');
+      return;
+    }
+    
+    const val = res.getResponseText().trim();
+    if (val) props.setProperty(s.key, val);
+  }
+  
+  ui.alert('設定完了', '入力された情報を安全な領域に保存しました。', ui.ButtonSet.OK);
+}
+
+/**
+ * セットアップガイドをポップアップ表示
+ */
+function showSetupGuide() {
+  const html = HtmlService.createHtmlOutput(
+    '<div style="font-family: sans-serif; line-height: 1.6;">' +
+    '<h3 style="color: #2c3e50;">🚀 アプリとの接続手順</h3>' +
+    '<ol>' +
+    '<li>右上の青い<b>「デプロイ」</b>ボタンをクリック</li>' +
+    '<li><b>「新しいデプロイ」</b>を選択</li>' +
+    '<li>種類（歯車）を<b>「ウェブアプリ」</b>にする</li>' +
+    '<li>アクセスできるユーザーを<b>「全員」</b>に変更してデプロイ</li>' +
+    '<li>表示された<b>ウェブアプリURL</b>をコピーしてアプリの設定画面へ！</li>' +
+    '</ol>' +
+    '<p style="font-size: 0.9rem; color: #e74c3c;">※URLを貼り付けた後、アプリで「最新化」を押すのを忘れずに！</p>' +
+    '</div>'
+  ).setWidth(450).setHeight(300);
+  
+  SpreadsheetApp.getUi().showModalDialog(html, 'Nomad Ledger セットアップガイド');
+}
+
+/**
+ * 簡易テスト関数
+ */
+function testConnection() {
+  SpreadsheetApp.getUi().alert('スプレッドシートとスクリプトは正常に連携しています。');
+}
+
+/**
+ * =========================================================
+ * 外部API通信関数（プロパティサービス連動版）
+ * =========================================================
+ */
+
+/**
+ * Gemini APIを呼び出す関数（Gemini 2.0 Flash想定）
+ */
+function callGeminiAPI(prompt) {
+  const apiKey = PropertiesService.getScriptProperties().getProperty('GEMINI_API_KEY');
+  if (!apiKey) return "【エラー】Gemini APIキーが設定されていません。管理メニューから登録してください。";
+
+  // V4.3指定モデルの Gemini 2.0 Flash を使用
+  const url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=" + apiKey;
+  const payload = {
+    contents: [{ parts: [{ text: prompt }] }]
+  };
+  
+  const options = {
+    method: 'post',
+    contentType: 'application/json',
+    payload: JSON.stringify(payload),
+    muteHttpExceptions: true
+  };
+
+  try {
+    const response = UrlFetchApp.fetch(url, options);
+    const json = JSON.parse(response.getContentText());
+    if (json.error) return "【AIエラー】" + json.error.message;
+    return json.candidates[0].content.parts[0].text;
+  } catch (e) {
+    return "【通信エラー】Gemini APIの呼び出しに失敗しました。" + e.toString();
+  }
+}
+
+/**
+ * SlackへWebhook経由で送信する関数
+ */
+function sendToSlack(text) {
+  const webhookUrl = PropertiesService.getScriptProperties().getProperty('SLACK_WEBHOOK_URL');
+  if (!webhookUrl) {
+    console.error("Slack Webhook URLが設定されていません。");
+    return;
+  }
+
+  const payload = { text: text };
+  const options = {
+    method: 'post',
+    contentType: 'application/json',
+    payload: JSON.stringify(payload)
+  };
+
+  try {
+    UrlFetchApp.fetch(webhookUrl, options);
+  } catch (e) {
+    console.error("Slack通知エラー: " + e.toString());
+  }
+}
