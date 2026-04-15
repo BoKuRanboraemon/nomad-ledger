@@ -1,3 +1,9 @@
+// app.js の一番上に追記
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('./sw.js')
+    .then(() => console.log('Service Worker Registered!'))
+    .catch((err) => console.log('Service Worker Failed', err));
+}
 // --- 画面の高さを絶対的なピクセルで強制固定する処理 ---
 const fixViewportHeight = () => {
     const exactHeight = window.innerHeight + 'px';
