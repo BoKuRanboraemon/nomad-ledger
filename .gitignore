@@ -1,0 +1,61 @@
+Rules
+
+# Python
+backend/.venv/
+backend/__pycache__/
+backend/**/__pycache__/
+__pycache__/
+**/__pycache__/
+*.py[cod]
+*.pyo
+
+# Secrets — NEVER commit
+backend/.env
+.env
+.env.local
+.env.*.local
+.claw
+.mex
+.samdbox-home
+.sandbox-tmp
+
+# Frontend build
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+
+# macOS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+.AppleDouble
+.LSOverride
+Icon
+.DocumentRevisions-V100
+.fseventsd
+.TemporaryItems
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+.AppleDB
+.AppleDesktop
+Network Trash Folder
+Temporary Items
+.apdisk
+**/.DS_Store
+
+# Logs
+*.log
+
+# Dual-graph MCP cache
+.dual-graph/
+
+# Claude Code local settings (machine-specific paths, not for sharing)
+.claude/
+
+# Editor
+.vscode/
+.idea/
