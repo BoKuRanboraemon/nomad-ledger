@@ -347,7 +347,13 @@ const renderUI = () => {
   if (storeNameDisplay) storeNameDisplay.innerText = config.store_name;
 
   const dataSourceInfo = document.getElementById("data-source-info");
-  if (dataSourceInfo) dataSourceInfo.innerText = "データ参照元: localStorage";
+  if (dataSourceInfo) {
+    if (config.endpoint_url && config.endpoint_url.trim() !== "") {
+      dataSourceInfo.innerText = "データ参照元: Googleスプレッドシート";
+    } else {
+      dataSourceInfo.innerText = "データ参照元: localStorage (未設定)";
+    }
+  }
 
   const productGrid = document.getElementById("product-grid");
   if (productGrid) {
